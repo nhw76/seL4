@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/ {
+    chosen { seL4,kernel-devices = &aplic_s, &imsic_s; };
+    aplic_s: interrupt-controller@d000000 {
+        compatible = "riscv,aplic";
+        reg = <0 0x0d000000 0 0x8000>;
+        interrupt-controller;
+        #interrupt-cells = <2>;
+        #address-cells = <0>;
+        riscv,num-sources = <31>;
+        msi-parent = <&imsic_s>;
+    };
+    imsic_s: interrupt-controller@28000000 {
+        compatible = "riscv,imsics";
+        reg = <0 0x28000000 0 0x4000>;
+        interrupt-controller;
+        #interrupt-cells = <0>;
+        msi-controller;
+        #msi-cells = <0>;
+        riscv,num-ids = <63>;
+        riscv,hart-index-bits = <2>;
+    };
+};

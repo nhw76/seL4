@@ -134,13 +134,7 @@ exception_t decodeIRQHandlerInvocation(word_t invLabel, irq_t irq)
 void invokeIRQHandler_AckIRQ(irq_t irq)
 {
 #ifdef CONFIG_ARCH_RISCV
-#if !defined(CONFIG_PLAT_QEMU_RISCV_VIRT)
-    /* QEMU has a bug where interrupts must be
-     * immediately claimed, which is done in getActiveIRQ. For other
-     * platforms, the claim can wait and be done here.
-     */
-    plic_complete_claim(irq);
-#endif
+    irq_backend_ack(irq);
 #else
 
 #if defined ENABLE_SMP_SUPPORT && defined CONFIG_ARCH_ARM
@@ -228,7 +222,9 @@ void handleInterrupt(irq_t irq)
             printf("Undelivered IRQ: %d\n", (int)IRQT_TO_IRQ(irq));
 #endif
         }
-#ifndef CONFIG_ARCH_RISCV
+#ifdef CONFIG_ARCH_RISCV
+        irq_backend_delivered(irq);
+#else
         if (!config_set(CONFIG_ARM_GIC_V3_SUPPORT)) {
             maskInterrupt(true, irq);
         }

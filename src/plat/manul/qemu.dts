@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/ {
+    cpus {
+        timebase-frequency = <10000000>;
+        cpu@0 { clock-frequency = <10000000>; };
+    };
+};

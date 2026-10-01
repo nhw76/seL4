@@ -12,11 +12,16 @@
 
 exception_t Arch_checkIRQ(word_t irq)
 {
-    if (irq > maxIRQ || irq == irqInvalid) {
+#ifdef CONFIG_RISCV_AIA
+    const word_t user_max_irq = EXTERNAL_MAX_IRQ;
+#else
+    const word_t user_max_irq = maxIRQ;
+#endif
+    if (irq > user_max_irq || irq == irqInvalid) {
         current_syscall_error.type = seL4_RangeError;
         current_syscall_error.rangeErrorMin = 1;
-        current_syscall_error.rangeErrorMax = maxIRQ;
-        userError("Rejecting request for IRQ %u. IRQ is out of range [1..%u].", (int)irq, maxIRQ);
+        current_syscall_error.rangeErrorMax = user_max_irq;
+        userError("Rejecting request for IRQ %u. IRQ is out of range [1..%u].", (int)irq, (int)user_max_irq);
         return EXCEPTION_SYSCALL_ERROR;
     }
     return EXCEPTION_NONE;
@@ -58,6 +63,13 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length,
             return status;
         }
 
+#ifdef HAVE_SET_TRIGGER
+        if (!irq_backend_trigger_supported(trigger)) {
+            current_syscall_error.type = seL4_InvalidArgument;
+            current_syscall_error.invalidArgumentNumber = 1;
+            return EXCEPTION_SYSCALL_ERROR;
+        }
+#endif
         if (isIRQActive(irq)) {
             current_syscall_error.type = seL4_RevokeFirst;
             userError("Rejecting request for IRQ %u. Already active.", (int)irq);

@@ -187,6 +187,8 @@ CONTROLLERS = {
     'ti,omap3-intc': RawIrqController,
     'riscv,cpu-intc': RawIrqController,
     'riscv,plic0': RawIrqController,
+    'riscv,aplic': RawIrqController,
+    'riscv,imsics': RawIrqController,
 }
 
 

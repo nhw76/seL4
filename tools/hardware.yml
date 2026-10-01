@@ -202,6 +202,20 @@ devices:
         user: true
         kernel_size: 0x1000
 
+  # Supervisor AIA controllers selected explicitly by kernel-devices.
+  - compatible:
+      - riscv,aplic
+    regions:
+      - index: 0
+        kernel: APLIC_PPTR
+        kernel_size: 0x8000
+  - compatible:
+      - riscv,imsics
+    regions:
+      - index: 0
+        kernel: IMSIC_PPTR
+        kernel_size: 0x4000
+
   # SiFive U54/U74 PLIC (HiFive, Polarfire)
   - compatible:
       - riscv,plic0

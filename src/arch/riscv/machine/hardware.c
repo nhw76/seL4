@@ -47,19 +47,8 @@ BOOT_CODE void map_kernel_devices(void)
     }
 }
 
-/*
- * The following assumes familiarity with RISC-V interrupt delivery and the PLIC.
- * See the RISC-V privileged specification v1.10 and the comment in
- * include/plat/spike/plat/machine.h for more information.
- * RISC-V IRQ handling on seL4 works as follows:
- *
- * On other architectures the kernel masks interrupts between delivering them to
- * userlevel and receiving the acknowledgment invocation. This strategy doesn't
- * work on RISC-V as an IRQ is implicitly masked when it is claimed, until the
- * claim is acknowledged. If we mask and unmask the interrupt at the PLIC while
- * a claim is in progress we sometimes experience IRQ sources not being masked
- * and unmasked as expected. Because of this, we don't mask and unmask IRQs that
- * are for user level, and also call plic_complete_claim for seL4_IRQHandler_Ack.
+/* Controller backends own claim, delivery suppression and user rearm.
+ * ackInterrupt below only ends kernel dispatch, not device servicing.
  */
 
 static irq_t active_irq[CONFIG_MAX_NUM_NODES];
@@ -96,18 +85,12 @@ static inline irq_t getActiveIRQ(void)
      */
     word_t sip = read_sip();
     if (sip & BIT(SIP_SEIP)) {
-        /* Even if we say an external interrupt is pending, the PLIC may not
+        /* Even if we say an external interrupt is pending, the controller may not
          * return any pending interrupt here in some corner cases. A level
-         * triggered interrupt might have been deasserted again or another hard
+         * triggered interrupt might have been deasserted again or another hart
          * has claimed it in a multicore system.
          */
-        irq = plic_get_claim();
-#ifdef CONFIG_PLAT_QEMU_RISCV_VIRT
-        /* QEMU bug requires external interrupts to be immediately claimed. For
-         * other platforms, the claim is done in invokeIRQHandler_AckIRQ.
-         */
-        plic_complete_claim(irq);
-#endif
+        irq = irq_backend_claim();
 #ifdef ENABLE_SMP_SUPPORT
     } else if (sip & BIT(SIP_SSIP)) {
         sbi_clear_ipi();
@@ -139,8 +122,8 @@ static inline irq_t getActiveIRQ(void)
 /**
  * Sets the irq trigger.
  *
- * setIRQTrigger can change the trigger between edge and level at the PLIC for
- * external interrupts. It is implementation specific as whether the PLIC has
+ * setIRQTrigger can change the trigger between edge and level at the controller for
+ * external interrupts. It is implementation specific as whether the controller has
  * support for this operation.
  *
  * @param[in]  irq             The irq
@@ -148,7 +131,7 @@ static inline irq_t getActiveIRQ(void)
  */
 void setIRQTrigger(irq_t irq, bool_t edge_triggered)
 {
-    plic_irq_set_trigger(irq, edge_triggered);
+    irq_backend_set_trigger(irq, edge_triggered);
 }
 #endif
 
@@ -172,7 +155,7 @@ static inline bool_t isIRQPending(void)
  *
  * maskInterrupt disables and enables IRQs. When an IRQ is disabled, it should
  * not raise an interrupt on the Kernel's HART context. This either masks the
- * core timer on the sie register or masks an external IRQ at the plic.
+ * core timer on the sie register or masks an external IRQ at the controller.
  *
  * @param[in]  disable  The disable
  * @param[in]  irq      The irq
@@ -191,7 +174,7 @@ static inline void maskInterrupt(bool_t disable, irq_t irq)
         return;
 #endif
     } else {
-        plic_mask_irq(disable, irq);
+        irq_backend_mask(disable, irq);
     }
 }
 
@@ -246,13 +229,13 @@ BOOT_CODE void initLocalIRQController(void)
 {
     printf("Init local IRQ\n");
 
-    /* Init per-hart PLIC */
-    plic_init_hart();
+    /* Initialize the selected per-hart controller backend. */
+    irq_backend_init_hart();
 
     /* Enable timer and external interrupt. If SMP is enabled, then enable the
      * software interrupt also, it is used as IPI between cores. */
-    /* Manul smoke port intentionally has no external IRQ backend yet. */
-#ifdef CONFIG_PLAT_MANUL
+    /* Keep the original Manul no-external-IRQ baseline selectable. */
+#if defined(CONFIG_PLAT_MANUL) && !defined(CONFIG_RISCV_AIA)
     clear_sie_mask(BIT(SIE_SEIE));
     set_sie_mask(BIT(SIE_STIE));
 #else
@@ -262,7 +245,7 @@ BOOT_CODE void initLocalIRQController(void)
 
 BOOT_CODE void initIRQController(void)
 {
-    printf("Initializing PLIC...\n");
+    printf("Initializing IRQ controller...\n");
 
     /* Initialize active_irq[] properly to stick to the semantics and play safe.
      * Effectively this is not needed if irqInvalid is zero (which is currently
@@ -273,7 +256,7 @@ BOOT_CODE void initIRQController(void)
         active_irq[i] = irqInvalid;
     }
 
-    plic_init_controller();
+    irq_backend_init_controller();
 }
 
 static inline void handleSpuriousIRQ(void)
