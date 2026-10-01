@@ -11,4 +11,5 @@ fi
 
 set -e
 
-xmllint "$@" 2> >(grep -v --regexp='validates$' 1>&2)
+# Keep validation usable on hosts that restrict process substitution.
+exec xmllint "$@"
