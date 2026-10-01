@@ -251,7 +251,13 @@ BOOT_CODE void initLocalIRQController(void)
 
     /* Enable timer and external interrupt. If SMP is enabled, then enable the
      * software interrupt also, it is used as IPI between cores. */
+    /* Manul smoke port intentionally has no external IRQ backend yet. */
+#ifdef CONFIG_PLAT_MANUL
+    clear_sie_mask(BIT(SIE_SEIE));
+    set_sie_mask(BIT(SIE_STIE));
+#else
     set_sie_mask(BIT(SIE_SEIE) | BIT(SIE_STIE) | SMP_TERNARY(BIT(SIE_SSIE), 0));
+#endif
 }
 
 BOOT_CODE void initIRQController(void)

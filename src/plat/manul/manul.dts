@@ -1,0 +1,24 @@
+/dts-v1/;
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    compatible = "nhw76,manul-sel4-smoke";
+    model = "Manul single-hart seL4 smoke test; no external IRQs";
+    chosen { };
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <150000000>;
+        cpu@0 {
+            device_type = "cpu"; reg = <0>; status = "okay";
+            compatible = "riscv"; riscv,isa = "rv64imafdc";
+            mmu-type = "riscv,sv39"; clock-frequency = <150000000>;
+        };
+    };
+    memory@80000000 { device_type = "memory"; reg = <0 0x80000000 1 0>; };
+    reserved-memory {
+        #address-cells = <2>; #size-cells = <2>; ranges;
+        legacy-uncached@ff000000 { reg = <0 0xff000000 0 0x01000000>; no-map; };
+        sbi@80000000 { reg = <0 0x80000000 0 0x200000>; no-map; };
+    };
+};
