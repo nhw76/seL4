@@ -1,0 +1,3 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Preserve the boot firmware and legacy uncached-window reservations. */
+&{/memory@80000000} { reg = <0 0x80000000 8 0>; };
