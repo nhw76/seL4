@@ -98,6 +98,45 @@ static inline void sbi_shutdown(void)
 
 #ifdef ENABLE_SMP_SUPPORT
 
+#ifdef CONFIG_RISCV_AIA
+/* SBI v0.2+ uses hart-mask values, not supervisor virtual stack pointers.
+ * Manul's OpenSBI supplies IPI and RFENCE; retain legacy paths elsewhere. */
+static inline void sbi_modern_call(word_t extension, word_t function,
+                                 word_t mask, word_t start, word_t size, word_t asid)
+{
+    register word_t a0 asm("a0") = mask;
+    register word_t a1 asm("a1") = 0; /* hart mask base */
+    register word_t a2 asm("a2") = start;
+    register word_t a3 asm("a3") = size;
+    register word_t a4 asm("a4") = asid;
+    register word_t a6 asm("a6") = function;
+    register word_t a7 asm("a7") = extension;
+    asm volatile("ecall" : "+r"(a0), "+r"(a1)
+                 : "r"(a2), "r"(a3), "r"(a4), "r"(a6), "r"(a7) : "memory");
+    assert(a0 == 0);
+}
+static inline void sbi_clear_ipi(void)
+{
+    asm volatile("csrc sip, %0" :: "r"((word_t)2) : "memory");
+}
+static inline void sbi_send_ipi(word_t mask)
+{
+    sbi_modern_call(0x735049, 0, mask, 0, 0, 0);
+}
+static inline void sbi_remote_fence_i(word_t mask)
+{
+    sbi_modern_call(0x52464e43, 0, mask, 0, 0, 0);
+}
+static inline void sbi_remote_sfence_vma(word_t mask, unsigned long start, unsigned long size)
+{
+    sbi_modern_call(0x52464e43, 1, mask, start, size, 0);
+}
+static inline void sbi_remote_sfence_vma_asid(word_t mask, unsigned long start,
+                                          unsigned long size, unsigned long asid)
+{
+    sbi_modern_call(0x52464e43, 2, mask, start, size, asid);
+}
+#else
 static inline void sbi_clear_ipi(void)
 {
     SBI_CALL_0(SBI_CLEAR_IPI);
@@ -154,4 +193,5 @@ static inline void sbi_remote_sfence_vma_asid(word_t hart_mask,
     SBI_CALL_1(SBI_REMOTE_SFENCE_VMA_ASID, virt_addr_hart_mask);
 }
 
+#endif /* CONFIG_RISCV_AIA */
 #endif /* ENABLE_SMP_SUPPORT */

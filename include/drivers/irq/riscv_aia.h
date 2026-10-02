@@ -3,11 +3,10 @@
 
 #include <plat/machine/devices_gen.h>
 
-/* Initial backend: RV64, one active hart, 31 wired sources, 63 IMSIC IDs.
- * Refuse SMP until remote file operations and IRQ ownership are implemented.
- */
-#if CONFIG_MAX_NUM_NODES != 1 || !defined(CONFIG_ARCH_RISCV64)
-#error "The initial AIA backend requires one RV64 hart"
+/* Wired interrupts belong to logical core 0; other cores use a synchronous
+ * kernel remote call to operate on that core's IMSIC CSRs. */
+#if !defined(CONFIG_ARCH_RISCV64)
+#error "The AIA backend requires RV64"
 #endif
 #define HAVE_SET_TRIGGER 1
 #define AIA_LAST_SOURCE 31
@@ -30,7 +29,13 @@
 #define APLIC_EDGE_HIGH 4
 #define APLIC_LEVEL_HIGH 6
 
-static word_t aia_edge_sources;
+extern word_t aia_edge_sources;
+void aia_cancel_active_irq(irq_t irq);
+bool_t aia_on_owner(void);
+enum { AIA_REMOTE_ACK, AIA_REMOTE_MASK, AIA_REMOTE_TRIGGER };
+#ifdef ENABLE_SMP_SUPPORT
+void aia_remote_op(word_t op, irq_t irq, word_t argument);
+#endif
 
 static inline void aia_fence(void)
 {
@@ -68,7 +73,7 @@ static inline uint32_t aplic_read(word_t offset)
 
 /* AIA 1.0, synchronization with APLIC: the reserved, disabled identity is
  * received after older MSIs to this hart. A fence alone cannot drain MSIs.
- * Caller holds the kernel execution context; this backend is single-hart.
+ * Executed on the owner hart under the kernel lock or its remote-call protocol.
  */
 static inline void aplic_sync(void)
 {
@@ -108,7 +113,7 @@ static inline void irq_backend_delivered(irq_t irq)
 {
     imsic_clear(IMSIC_EIE0, BIT(irq));
 }
-static inline void irq_backend_ack(irq_t irq)
+static inline void aia_ack_local(irq_t irq)
 {
     /* Order device servicing writes before sampling the input at the APLIC. */
     aia_fence();
@@ -117,7 +122,7 @@ static inline void irq_backend_ack(irq_t irq)
     }
     imsic_set(IMSIC_EIE0, BIT(irq));
 }
-static inline void irq_backend_mask(bool_t disable, irq_t irq)
+static inline void aia_mask_local(bool_t disable, irq_t irq)
 {
     if (disable) {
         imsic_clear(IMSIC_EIE0, BIT(irq));
@@ -125,9 +130,10 @@ static inline void irq_backend_mask(bool_t disable, irq_t irq)
         aplic_write(APLIC_CLRIPNUM, irq);
         aplic_sync();
         imsic_clear(IMSIC_EIP0, BIT(irq));
+        aia_cancel_active_irq(irq);
     } else {
         aplic_write(APLIC_SETIENUM, irq);
-        irq_backend_ack(irq);
+        aia_ack_local(irq);
     }
 }
 static inline bool_t irq_backend_trigger_supported(bool_t edge)
@@ -139,13 +145,46 @@ static inline bool_t irq_backend_trigger_supported(bool_t edge)
     return !edge;
 #endif
 }
-static inline void irq_backend_set_trigger(irq_t irq, bool_t edge)
+static inline void aia_set_trigger_local(irq_t irq, bool_t edge)
 {
-    irq_backend_mask(true, irq);
+    aia_mask_local(true, irq);
     if (edge) { aia_edge_sources |= BIT(irq); }
     else { aia_edge_sources &= ~BIT(irq); }
     aplic_write(APLIC_SOURCECFG + 4 * (irq - 1), edge ? APLIC_EDGE_HIGH : APLIC_LEVEL_HIGH);
     aplic_write(APLIC_TARGET + 4 * (irq - 1), (CONFIG_FIRST_HART_ID << 18) | irq);
+}
+static inline void irq_backend_ack(irq_t irq)
+{
+    aia_fence(); /* Order the calling core's device writes before remote rearm. */
+#ifdef ENABLE_SMP_SUPPORT
+    if (!aia_on_owner()) {
+        aia_remote_op(AIA_REMOTE_ACK, irq, 0);
+        return;
+    }
+#endif
+    aia_ack_local(irq);
+}
+static inline void irq_backend_mask(bool_t disable, irq_t irq)
+{
+    aia_fence();
+#ifdef ENABLE_SMP_SUPPORT
+    if (!aia_on_owner()) {
+        aia_remote_op(AIA_REMOTE_MASK, irq, disable);
+        return;
+    }
+#endif
+    aia_mask_local(disable, irq);
+}
+static inline void irq_backend_set_trigger(irq_t irq, bool_t edge)
+{
+    aia_fence();
+#ifdef ENABLE_SMP_SUPPORT
+    if (!aia_on_owner()) {
+        aia_remote_op(AIA_REMOTE_TRIGGER, irq, edge);
+        return;
+    }
+#endif
+    aia_set_trigger_local(irq, edge);
 }
 static inline void irq_backend_init_hart(void)
 {

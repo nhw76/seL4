@@ -8,8 +8,19 @@
 #include <mode/smp/ipi.h>
 #include <smp/lock.h>
 #include <util.h>
+#include <smp/ipi.h>
+#ifdef CONFIG_RISCV_AIA
+#include <drivers/irq/riscv_aia.h>
+#endif
 
 #ifdef ENABLE_SMP_SUPPORT
+
+#ifdef CONFIG_RISCV_AIA
+void aia_remote_op(word_t op, irq_t irq, word_t argument)
+{
+    doRemoteOp3Arg(IpiRemoteCall_Aia, op, irq, argument, 0);
+}
+#endif
 
 static volatile irq_t ipiIrq[CONFIG_MAX_NUM_NODES];
 
@@ -29,6 +40,17 @@ void handleRemoteCall(IpiRemoteCall_t call, word_t arg0, word_t arg1, word_t arg
             break;
 #endif /* CONFIG_HAVE_FPU */
 
+#ifdef CONFIG_RISCV_AIA
+        case IpiRemoteCall_Aia:
+            assert(getCurrentCPUIndex() == 0);
+            switch (arg0) {
+            case AIA_REMOTE_ACK: aia_ack_local(arg1); break;
+            case AIA_REMOTE_MASK: aia_mask_local(arg2, arg1); break;
+            case AIA_REMOTE_TRIGGER: aia_set_trigger_local(arg1, arg2); break;
+            default: fail("Invalid AIA remote operation");
+            }
+            break;
+#endif
         default:
             fail("Invalid remote call");
             break;

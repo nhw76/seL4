@@ -52,6 +52,21 @@ BOOT_CODE void map_kernel_devices(void)
  */
 
 static irq_t active_irq[CONFIG_MAX_NUM_NODES];
+#ifdef CONFIG_RISCV_AIA
+word_t aia_edge_sources;
+bool_t aia_on_owner(void)
+{
+    return CURRENT_CPU_INDEX() == 0;
+}
+void aia_cancel_active_irq(irq_t irq)
+{
+    /* A claim can precede lock acquisition. Administrative teardown must also
+     * discard that cached claim before the source is handed to a new owner. */
+    if (active_irq[0] == irq) {
+        active_irq[0] = irqInvalid;
+    }
+}
+#endif
 
 
 /**

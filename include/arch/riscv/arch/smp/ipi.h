@@ -12,6 +12,9 @@
 typedef enum {
     IpiRemoteCall_Stall,
     IpiRemoteCall_switchFpuOwner,
+#ifdef CONFIG_RISCV_AIA
+    IpiRemoteCall_Aia,
+#endif
     IpiNumArchRemoteCall
 } IpiRemoteCall_t;
 
