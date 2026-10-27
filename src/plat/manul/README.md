@@ -19,7 +19,8 @@ ManulOS places its elfloader and embedded images separately at 0x82000000.
 The ManulOS repository supplies the custom emulator, OpenSBI, and a shared
 kernel/userspace/elfloader build. A four-hart, 1 GiB QEMU smoke test reaches
 userspace and validates BootInfo. The separate four-hart, 3 GiB sel4test
-simulation build passes 117 tests with 50 disabled by upstream configuration.
+simulation build with the userspace AXI timer passes 127 tests with 40 disabled by upstream
+configuration.
 Hardware boot and hardware-only tests remain to be validated.
 Hardware use requires a matching kernel device-tree input; the original
 AIA platform and its older timing/memory assumptions are not used here.
