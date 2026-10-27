@@ -13,10 +13,12 @@ ManulOS scripts/prepare-sel4-dts.py. This converts /memreserve/ entries to
 no-map reserved-memory nodes, which seL4 16.0.0 requires. Generate
 it with the same RAM and hart count as the intended runtime. The overlay
 reserves the first 2 MiB for firmware and keeps the input DTB reservations,
-including the top-of-RAM DTB window. The payload/loader starts at 0x80200000.
+including the top-of-RAM DTB window. The kernel loads at 0x80200000;
+ManulOS places its elfloader and embedded images separately at 0x82000000.
 
-This is initial platform integration, not a boot-validated seL4 system.
-The ManulOS repository supplies the custom emulator and OpenSBI; a matching
-elfloader, userspace build and seL4 regression remain to be integrated.
+The ManulOS repository supplies the custom emulator, OpenSBI, and a shared
+kernel/userspace/elfloader build. A four-hart, 1 GiB QEMU smoke test reaches
+userspace and validates BootInfo. Hardware boot and the full seL4 regression
+suite remain to be validated.
 Hardware use requires a matching kernel device-tree input; the original
 AIA platform and its older timing/memory assumptions are not used here.
